@@ -74,6 +74,8 @@ struct _VAAPIContext {
     unsigned int        slice_data_size;
     int                 use_glx_copy;
     void               *glx_surface;
+    unsigned int        stream_width;
+    unsigned int        stream_height; 
 };
 
 int vaapi_init(VADisplay display);

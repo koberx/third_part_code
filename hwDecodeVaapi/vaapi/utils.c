@@ -22,6 +22,7 @@
 #include <time.h>
 #include <errno.h>
 #include "utils.h"
+#include <sys/time.h>
 
 // For NetBSD with broken pthreads headers
 #ifndef CLOCK_REALTIME

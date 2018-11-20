@@ -319,98 +319,22 @@ int has_ffmpeg_profile(int codec_id, int ffmpeg_profile)
 	VAAPIContext *vaapi = vaapi_get_context();
 	VAProfile profile;
 	switch (codec_id) {
-		case CODEC_ID_MPEG2VIDEO:
+		case AV_CODEC_ID_MPEG2VIDEO:
 			profile = VAProfileMPEG2Main;
 			break;
-		case CODEC_ID_MPEG4:
+		case AV_CODEC_ID_MPEG4:
 			profile = VAProfileMPEG4Main;
 			break;
-		case CODEC_ID_H264:
+		case AV_CODEC_ID_H264:
 			profile = VAProfileH264High;
 			break;
-		case CODEC_ID_VC1:
+		case AV_CODEC_ID_VC1:
 			profile = VAProfileVC1Advanced;
 			break;
 		default:
 			profile = -1;
 			break;
 	}
-#if 0
-	switch (codec_id) {
-		case CODEC_ID_MPEG2VIDEO:
-			switch (ffmpeg_profile) {
-				case FF_PROFILE_MPEG2_SIMPLE:
-					profile = VAProfileMPEG2Simple;
-					break;
-				case FF_PROFILE_MPEG2_MAIN:
-					profile = VAProfileMPEG2Main;
-					break;
-				default:
-					profile = -1;
-					break;
-			}
-			break;
-		case CODEC_ID_MPEG4:
-			switch (ffmpeg_profile) {
-				case FF_PROFILE_MPEG4_SIMPLE:
-					profile = VAProfileMPEG4Simple;
-					break;
-				case FF_PROFILE_MPEG4_ADVANCED_SIMPLE:
-					profile = VAProfileMPEG4AdvancedSimple;
-					break;
-				case FF_PROFILE_MPEG4_MAIN:
-					profile = VAProfileMPEG4Main;
-					break;
-				default:
-					profile = -1;
-					break;
-			}
-			break;
-		case CODEC_ID_H264:
-			switch (ffmpeg_profile) {
-				case FF_PROFILE_H264_BASELINE:
-				case FF_PROFILE_H264_MAIN:
-				case FF_PROFILE_H264_HIGH:
-				case FF_PROFILE_H264_CONSTRAINED_BASELINE:
-					profile = VAProfileH264High;
-					if (has_profile(vaapi, profile)) 
-						return FF_PROFILE_H264_HIGH;
-					profile = VAProfileH264Main;
-					if (has_profile(vaapi, profile)) 
-						return FF_PROFILE_H264_MAIN;
-					profile = VAProfileH264Baseline;
-					if (has_profile(vaapi, profile)) 
-						return FF_PROFILE_H264_BASELINE;
-					profile = VAProfileH264ConstrainedBaseline;
-					if (has_profile(vaapi, profile)) 
-						return FF_PROFILE_H264_CONSTRAINED_BASELINE;
-					break;
-				default:
-					profile = -1;
-					break;
-			}
-			break;
-		case CODEC_ID_VC1:
-			switch (ffmpeg_profile) {
-				case FF_PROFILE_VC1_SIMPLE:
-					profile = VAProfileVC1Simple;
-					break;
-				case FF_PROFILE_VC1_MAIN:
-					profile = VAProfileVC1Main;
-					break;
-				case FF_PROFILE_VC1_ADVANCED:
-					profile = VAProfileVC1Advanced;
-					break;
-				default:
-					profile = -1;
-					break;
-			}
-			break;
-		default:
-			profile = -1;
-			break;
-	}
-#endif
 
 	if (profile != -1)
 		return has_profile(vaapi, profile);

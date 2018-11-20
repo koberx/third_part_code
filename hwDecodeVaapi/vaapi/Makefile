@@ -1,4 +1,4 @@
-CFLAGS= -DUSE_FFMPEG_VAAPI -DHAVE_SWSCALE `pkg-config --cflags x11` `pkg-config --cflags xext`
+CFLAGS= -DUSE_FFMPEG_VAAPI -DHAVE_SWSCALE -Wno-deprecated-declarations `pkg-config --cflags x11` `pkg-config --cflags xext`
 LDFLAGS=-shared `pkg-config --libs x11` `pkg-config --libs xext` -lavcodec -lavformat -lswscale -lavutil -lva -lva-x11
 PLAYER_LDFLAGS=`pkg-config --libs x11` `pkg-config --libs xext` -lavcodec -lavformat -lswscale -lavutil -lva -lva-x11
 

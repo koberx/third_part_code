@@ -271,21 +271,21 @@ uint32_t image_rgba_format(
 }
 
 #if HAVE_SWSCALE
-static enum PixelFormat get_pixel_format(uint32_t fourcc)
+static enum AVPixelFormat get_pixel_format(uint32_t fourcc)
 {
 	switch (fourcc) {
-		case FOURCC('N','V','1','2'): return PIX_FMT_NV12;
+		case FOURCC('N','V','1','2'): return AV_PIX_FMT_NV12;
 		case FOURCC('I','Y','U','V'): /* duplicate of */
-		case FOURCC('I','4','2','0'): return PIX_FMT_YUV420P;
-		case FOURCC('U','Y','V','Y'): return PIX_FMT_UYVY422;
+		case FOURCC('I','4','2','0'): return AV_PIX_FMT_YUV420P;
+		case FOURCC('U','Y','V','Y'): return AV_PIX_FMT_UYVY422;
 		case FOURCC('Y','U','Y','2'): /* duplicate of */
-		case FOURCC('Y','U','Y','V'): return PIX_FMT_YUYV422;
-		case IMAGE_ARGB: return PIX_FMT_ARGB;
-		case IMAGE_BGRA: return PIX_FMT_BGRA;
-		case IMAGE_RGBA: return PIX_FMT_RGBA;
-		case IMAGE_ABGR: return PIX_FMT_ABGR;
+		case FOURCC('Y','U','Y','V'): return AV_PIX_FMT_YUYV422;
+		case IMAGE_ARGB: return AV_PIX_FMT_ARGB;
+		case IMAGE_BGRA: return AV_PIX_FMT_BGRA;
+		case IMAGE_RGBA: return AV_PIX_FMT_RGBA;
+		case IMAGE_ABGR: return AV_PIX_FMT_ABGR;
 	}
-	return PIX_FMT_NONE;
+	return AV_PIX_FMT_NONE;
 }
 #endif
 
@@ -305,7 +305,7 @@ static int image_convert_libswscale(
 {
 	int error = -1;
 	struct SwsContext *sws = NULL;
-	enum PixelFormat src_pix_fmt, dst_pix_fmt;
+	enum AVPixelFormat src_pix_fmt, dst_pix_fmt;
 	uint8_t *src[MAX_IMAGE_PLANES];
 	uint8_t *dst[MAX_IMAGE_PLANES];
 	int src_stride[MAX_IMAGE_PLANES];
@@ -319,7 +319,7 @@ static int image_convert_libswscale(
 	/* XXX: libswscale does not support AYUV formats yet */
 	switch (src_fourcc) {
 		case IMAGE_AYUV:
-			src_pix_fmt = PIX_FMT_YUV444P;
+			src_pix_fmt = AV_PIX_FMT_YUV444P;
 			for (i = 0; i < 3; i++) {
 				tmp_src[i] = malloc(src_width * src_height);
 				if (!tmp_src[i])
@@ -346,7 +346,7 @@ static int image_convert_libswscale(
 			}
 			break;
 		case IMAGE_YV12:
-			src_pix_fmt = PIX_FMT_YUV420P;
+			src_pix_fmt = AV_PIX_FMT_YUV420P;
 			src[0] = arg_src[0];
 			src_stride[0] = arg_src_stride[0];
 			src[1] = arg_src[2];
@@ -366,7 +366,7 @@ static int image_convert_libswscale(
 	/* XXX: libswscale does not support AYUV formats yet */
 	switch (dst_fourcc) {
 		case IMAGE_AYUV:
-			dst_pix_fmt = PIX_FMT_YUV444P;
+			dst_pix_fmt = AV_PIX_FMT_YUV444P;
 			for (i = 0; i < 3; i++) {
 				tmp_dst[i] = malloc(dst_width * dst_height);
 				if (!tmp_dst[i])
@@ -377,7 +377,7 @@ static int image_convert_libswscale(
 			}
 			break;
 		case IMAGE_YV12:
-			dst_pix_fmt = PIX_FMT_YUV420P;
+			dst_pix_fmt = AV_PIX_FMT_YUV420P;
 			dst[0] = arg_dst[0];
 			dst_stride[0] = arg_dst_stride[0];
 			dst[1] = arg_dst[2];
@@ -394,7 +394,7 @@ static int image_convert_libswscale(
 			break;
 	}
 
-	if (src_pix_fmt == PIX_FMT_NONE || dst_pix_fmt == PIX_FMT_NONE)
+	if (src_pix_fmt == AV_PIX_FMT_NONE || dst_pix_fmt == AV_PIX_FMT_NONE)
 		goto end;
 
 	sws = sws_getContext(src_width, src_height, src_pix_fmt,

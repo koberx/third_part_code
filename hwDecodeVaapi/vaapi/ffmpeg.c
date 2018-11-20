@@ -40,7 +40,7 @@ static int ffmpeg_init(void)
     if ((ffmpeg = calloc(1, sizeof(*ffmpeg))) == NULL)
         return -1;
 
-    if ((ffmpeg->frame = avcodec_alloc_frame()) == NULL) {
+    if ((ffmpeg->frame = av_frame_alloc()) == NULL) {
         free(ffmpeg);
         return -1;
     }
@@ -92,30 +92,33 @@ FFmpegContext *ffmpeg_get_context(void)
 }
 
 #ifdef USE_FFMPEG_VAAPI
-static enum PixelFormat get_format(struct AVCodecContext *avctx,
-                                   const enum PixelFormat *fmt)
+static enum AVPixelFormat get_format(struct AVCodecContext *avctx,
+                                   const enum AVPixelFormat *fmt)
 {
     int i, profile;
 
-    for (i = 0; fmt[i] != PIX_FMT_NONE; i++) {
-        if (fmt[i] != PIX_FMT_VAAPI_VLD)
+    for (i = 0; fmt[i] != AV_PIX_FMT_NONE; i++) {
+        if (fmt[i] != AV_PIX_FMT_VAAPI_VLD)
             continue;
         switch (avctx->codec_id) {
-        case CODEC_ID_MPEG2VIDEO:
+        case AV_CODEC_ID_MPEG2VIDEO:
             profile = VAProfileMPEG2Main;
             break;
-        case CODEC_ID_MPEG4:
-        case CODEC_ID_H263:
+        case AV_CODEC_ID_MPEG4:
+        case AV_CODEC_ID_H263:
             profile = VAProfileMPEG4AdvancedSimple;
             break;
-        case CODEC_ID_H264:
+        case AV_CODEC_ID_H264:
             profile = VAProfileH264High;
             break;
-        case CODEC_ID_WMV3:
+        case AV_CODEC_ID_WMV3:
             profile = VAProfileVC1Main;
             break;
-        case CODEC_ID_VC1:
+        case AV_CODEC_ID_VC1:
             profile = VAProfileVC1Advanced;
+            break;
+        case AV_CODEC_ID_HEVC:
+            profile = VAProfileHEVCMain;
             break;
         default:
             profile = -1;
@@ -131,18 +134,21 @@ static enum PixelFormat get_format(struct AVCodecContext *avctx,
             }
         }
     }
-    return PIX_FMT_NONE;
+    return AV_PIX_FMT_NONE;
+}
+static void release_buffer(void *avctx, uint8_t *data)
+{
+    data = NULL;
 }
 
-static int get_buffer(struct AVCodecContext *avctx, AVFrame *pic)
+static int get_buffer(struct AVCodecContext *avctx, AVFrame *pic, int flags)
 {
+#if 0
     VAAPIContext * const vaapi = vaapi_get_context();
     void *surface = (void *)(uintptr_t)vaapi->surface_ids[vaapi->surface_index];
     vaapi->surface_index++;
     vaapi->surface_index = vaapi->surface_index % vaapi->surface_nums;
 
-    pic->type           = FF_BUFFER_TYPE_USER;
-    //pic->age            = 1;
     pic->data[0]        = surface;
     pic->data[1]        = NULL;
     pic->data[2]        = NULL;
@@ -151,16 +157,34 @@ static int get_buffer(struct AVCodecContext *avctx, AVFrame *pic)
     pic->linesize[1]    = 0;
     pic->linesize[2]    = 0;
     pic->linesize[3]    = 0;
+
+    return avcodec_default_get_buffer2(avctx, pic, flags);
+#else 
+    VAAPIContext * const vaapi = vaapi_get_context();
+    AVBufferRef *surf_buf;
+    AVBufferRef *surf_buf_data3;
+    void *surface = (void *)(uintptr_t)vaapi->surface_ids[vaapi->surface_index];
+    vaapi->surface_index++;
+    vaapi->surface_index = vaapi->surface_index % vaapi->surface_nums;
+    pic->data[0] = (uint8_t*) surface;
+    pic->data[1] = NULL;
+    pic->data[2] = NULL;
+    pic->data[3] = (uint8_t*) surface;
+    pic->linesize[0] = 0;
+    pic->linesize[1] = 0;
+    pic->linesize[2] = 0;
+    pic->linesize[3] = 0;
+
+    surf_buf = av_buffer_create(pic->data[0], 0, release_buffer,
+                                  NULL, AV_BUFFER_FLAG_READONLY);
+    surf_buf_data3 = av_buffer_create(pic->data[3], 0, release_buffer,
+                                  NULL, AV_BUFFER_FLAG_READONLY);
+    pic->buf[0] = surf_buf;
+    pic->buf[3] = surf_buf_data3;
     return 0;
+#endif
 }
 
-static void release_buffer(struct AVCodecContext *avctx, AVFrame *pic)
-{
-    pic->data[0]        = NULL;
-    pic->data[1]        = NULL;
-    pic->data[2]        = NULL;
-    pic->data[3]        = NULL;
-}
 #endif
 
 int ffmpeg_init_context(AVCodecContext *avctx)
@@ -168,9 +192,9 @@ int ffmpeg_init_context(AVCodecContext *avctx)
 #ifdef USE_FFMPEG_VAAPI
         avctx->thread_count    = 1;
         avctx->get_format      = get_format;
-        avctx->get_buffer      = get_buffer;
-        avctx->reget_buffer    = get_buffer;
-        avctx->release_buffer  = release_buffer;
+        avctx->get_buffer2      = get_buffer;
+        //avctx->reget_buffer    = get_buffer;
+        //avctx->release_buffer  = release_buffer;
         avctx->draw_horiz_band = NULL;
         avctx->slice_flags     = SLICE_FLAG_CODED_ORDER|SLICE_FLAG_ALLOW_FIELD;
 #endif

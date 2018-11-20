@@ -25,7 +25,7 @@ static void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame)
 	pFile = fopen(szFilename, "wb");  
 	if(!pFile)  
 		return;  
-	fprintf(pFile, "P6\n%d %d\n255\n", width, height);  //ppm 文件头  
+	fprintf(pFile, "P6\n%d %d\n255\n", width, height);  //ppm
 	for(y=0; y<height; y++)  
 		fwrite(pFrame->data[0] + y * pFrame->linesize[0], 1, width * 3, pFile);  
 	fclose(pFile);  
@@ -37,7 +37,6 @@ int main(int argc, const char *argv[])
 	
 	/* this variable will store the ID of the newly created window. */
 	Window win;
-	XImage *ximage;
 	XShmSegmentInfo shminfo;
 
 	/* check the number of the default screen for our X server. */
@@ -48,14 +47,10 @@ int main(int argc, const char *argv[])
 			BlackPixel(display, DefaultScreen(display)),
 			BlackPixel(display, DefaultScreen(display)));
 
-    //事实上我们创建窗口并不意味着它将会被立刻显示在屏幕上，在缺省情况下，新建的窗口将不会被映射到屏幕上-它们是不可见的。
-    //为了能让我们创建的窗口能被显示到屏幕上，我们使用函数XMapWindow()：
 	XMapWindow(display, win);
 
-	//XSync()也刷新所有处于等待状态的请求，接着等待X服务器处理完所有的请求再继续。
 	XSync(display, False);
 
-#if 1   
 	AVFormatContext *pFormatCtx = NULL;  
 	int i, videoStream;  
 	AVCodecContext *pCodecCtx;  
@@ -65,10 +60,8 @@ int main(int argc, const char *argv[])
 	AVPacket packet;  
 	int frameFinished;  
 	int numBytes;  
-	uint8_t *buffer;  
-#endif    
-	//avcodec_init();
 	av_register_all();
+
 	ffmpeg_vaapi_init(display);
 
 	if(avformat_open_input(&pFormatCtx, argv[1], NULL, NULL) != 0) {  
@@ -89,20 +82,7 @@ int main(int argc, const char *argv[])
 	}  
 	pCodecCtx = pFormatCtx->streams[videoStream]->codec;
 	printf("refs %d\n", pCodecCtx->refs);
-	//pCodecCtx->skip_frame = AVDISCARD_NONREF;
-	//pCodecCtx->skip_idct = AVDISCARD_DEFAULT;
-	//pCodecCtx->skip_loop_filter = AVDISCARD_DEFAULT;
-	//pCodecCtx->refs = 1;
-#if 0
-#ifdef USE_XVBA
-	if (AV_CODEC_ID_H264 == pCodecCtx->codec_id)
-		pCodec = &ff_h264_xvba_decoder;
-	else if (AV_CODEC_ID_VC1 == pCodecCtx->codec_id)
-		pCodec = &ff_vc1_xvba_decoder;
-	else
-#endif
-#endif
-		ffmpeg_init_context(pCodecCtx);
+	ffmpeg_init_context(pCodecCtx);
 	pCodec = avcodec_find_decoder(pCodecCtx->codec_id);  
 	printf("refs %d\n", pCodecCtx->refs);
 	printf("codec name %s\n", pCodec->name);
@@ -114,70 +94,34 @@ int main(int argc, const char *argv[])
 		return -1;  
 	}  
 	printf("refs %d\n", pCodecCtx->refs);
-	pFrame = avcodec_alloc_frame();  
+	pFrame = av_frame_alloc();  
 	if(pFrame == NULL) {  
 		return -1;  
 	}  
-	pFrameRGB = avcodec_alloc_frame();  
+	pFrameRGB = av_frame_alloc();  
 	if(pFrameRGB == NULL) {  
 		return -1;  
 	}  
 
 	printf("compress level:%d\n", pCodecCtx->compression_level);
 
-	numBytes = avpicture_get_size(PIX_FMT_RGB32, pCodecCtx->width, pCodecCtx->height);  
-	//buffer = av_malloc(numBytes);  
-	//avpicture_fill((AVPicture *)pFrameRGB, buffer, AV_PIX_FMT_RGB32, pCodecCtx->width, pCodecCtx->height);  
+	numBytes = avpicture_get_size(AV_PIX_FMT_RGB32, pCodecCtx->width, pCodecCtx->height);  
 
 	XResizeWindow(display, win, pCodecCtx->width, pCodecCtx->height);
 	XSync(display, False);
 
-#if 0
-	ximage = XShmCreateImage(display, DefaultVisual(display, 0), DefaultDepth(display, 0),
-			ZPixmap, 0, &shminfo, pCodecCtx->width, pCodecCtx->height);
-
-	shminfo.shmid = shmget(IPC_PRIVATE, numBytes, IPC_CREAT | 0777);
-	if (shminfo.shmid < 0)
-		exit(-1);
-
-	shminfo.shmaddr = ximage->data = (unsigned char *)shmat(shminfo.shmid, 0, 0);
-	if(shminfo.shmaddr == (char *) -1)
-		exit(-1);
-
-	Image *image = image_create(pCodecCtx->width, pCodecCtx->height, IMAGE_BGRA, ximage->data);
-	if (!image) {
-		printf("image create error\n");
-	}
-
-	avpicture_fill((AVPicture *)pFrameRGB, ximage->data, PIX_FMT_RGB32, pCodecCtx->width, pCodecCtx->height);  
-
-	shminfo.readOnly = False;
-	XShmAttach(display, &shminfo);
-#endif
-
 	i = 0;  
 	while(av_read_frame(pFormatCtx, &packet) >=0) {  
 		if(packet.stream_index == videoStream) {  
-			//printf("pts %ld dts %ld\n", packet.pts, packet.dts);
 			avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);  
 			if(frameFinished) {
-				//printf("frame finish %d\n", frameFinished);
 				vaapi_display(win, pCodecCtx->width, pCodecCtx->height, (VASurfaceID)(uintptr_t)pFrame->data[3]);
-#if 0
-				get_image((VASurfaceID)(uintptr_t)pFrame->data[3], image);
-				XShmPutImage(display, win, DefaultGC(display, 0), ximage, 0, 0, 0, 0, pCodecCtx->width, pCodecCtx->height, False);
-				XFlush(display);
-				i++;
-#endif
 			} else {
 				printf("no frame decoded\n");
 			}
 		}  
 		av_free_packet(&packet);  
-		//usleep(20000);
 	}  
-	av_free(buffer);  
-	XDestroyImage(ximage);
 	av_free(pFrameRGB);  
 	av_free(pFrame);
 	ffmpeg_vaapi_exit();
