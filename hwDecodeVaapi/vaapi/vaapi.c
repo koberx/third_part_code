@@ -24,7 +24,6 @@
 #include "vaapi.h"
 #include "vaapi_compat.h"
 #include "utils.h"
-#include "image.h"
 
 #if USE_GLX
 #include "glx.h"
@@ -525,8 +524,9 @@ int vaapi_init_decoder(VAProfile    profile,
 	return 0;
 }
 
-#if 0
+#if 1
 static const uint32_t image_formats[] = {
+	VA_FOURCC('R','G','B','A'),
 	VA_FOURCC('Y','V','1','2'),
 	VA_FOURCC('N','V','1','2'),
 	VA_FOURCC('U','Y','V','Y'),
@@ -534,7 +534,6 @@ static const uint32_t image_formats[] = {
 	VA_FOURCC('A','R','G','B'),
 	VA_FOURCC('A','B','G','R'),
 	VA_FOURCC('B','G','R','A'),
-	VA_FOURCC('R','G','B','A'),
 	0
 };
 
@@ -550,7 +549,6 @@ get_image_format(
 
 	if (image_format)
 		*image_format = NULL;
-
 	if (!vaapi->image_formats || vaapi->n_image_formats == 0) {
 		vaapi->image_formats = calloc(vaMaxNumImageFormats(vaapi->display),
 				sizeof(vaapi->image_formats[0]));
@@ -562,7 +560,7 @@ get_image_format(
 				&vaapi->n_image_formats);
 		if (!vaapi_check_status(status, "vaQueryImageFormats()"))
 			return 0;
-
+        printf("rxhu come to here!\n"); 
 		D(bug("%d image formats\n", vaapi->n_image_formats));
 		for (i = 0; i < vaapi->n_image_formats; i++)
 			D(bug("  %s\n", string_of_VAImageFormat(&vaapi->image_formats[i])));
@@ -655,7 +653,7 @@ int get_image(VASurfaceID surface, Image *dst_img)
 
 	if (vaSyncSurface(vaapi->display, vaapi->context_id, surface))
 		D(bug("vaSyncSurface failed\n"));
-
+#if 0
 	if (!image_format) {
 		status = vaDeriveImage(vaapi->display, surface, &image);
 		if (vaapi_check_status(status, "vaDeriveImage()")) {
@@ -669,7 +667,7 @@ int get_image(VASurfaceID surface, Image *dst_img)
 			}
 		}
 	}
-
+#endif
 	if (!image_format) {
 		for (i = 0; image_formats[i] != 0; i++) {
 			if (get_image_format(vaapi, image_formats[i], &image_format))
@@ -702,7 +700,7 @@ int get_image(VASurfaceID surface, Image *dst_img)
 					src_rect.x, src_rect.y, src_rect.width, src_rect.height));
 
 		status = vaGetImage(
-				vaapi->display, vaapi->surface_id,
+				vaapi->display, surface,
 				src_rect.x, src_rect.y, src_rect.width, src_rect.height,
 				image.image_id
 				);
@@ -711,13 +709,13 @@ int get_image(VASurfaceID surface, Image *dst_img)
 			goto end;
 		}
 	}
-
+    printf("[rxhu] bind_image start to bind_image \n");
 	if (bind_image(&image, &bound_image) < 0)
 		goto end;
 	is_bound_image = 1;
-
-	if (image_convert(dst_img, &bound_image) < 0)
+	if (image_convert(dst_img, &bound_image) < 0) {
 		goto end;
+    }
 
 	error = 0;
 end:

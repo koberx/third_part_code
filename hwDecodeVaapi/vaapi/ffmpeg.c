@@ -99,6 +99,7 @@ static enum AVPixelFormat get_format(struct AVCodecContext *avctx,
 
     for (i = 0; fmt[i] != AV_PIX_FMT_NONE; i++) {
         if (fmt[i] != AV_PIX_FMT_VAAPI_VLD)
+      //  if (fmt[i] != AV_PIX_FMT_NV12)
             continue;
         switch (avctx->codec_id) {
         case AV_CODEC_ID_MPEG2VIDEO:

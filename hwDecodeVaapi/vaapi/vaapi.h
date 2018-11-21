@@ -29,6 +29,7 @@
 #include <va/va.h>
 #include <va/va_x11.h>
 #endif
+#include "image.h"
 
 #define MAX_VIDEO_SURFACES		17
 #define NUM_VIDEO_SURFACES_MPEG2	3
@@ -91,4 +92,5 @@ int vaapi_init_decoder(VAProfile        profile,
                        unsigned int     picture_height);
 
 extern int vaapi_display(Window window, int window_width, int window_height, VASurfaceID surface_id);
+extern int get_image(VASurfaceID surface, Image *dst_img);
 #endif /* VAAPI_H */
