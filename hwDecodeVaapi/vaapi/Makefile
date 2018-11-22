@@ -1,21 +1,8 @@
-CFLAGS= -DUSE_FFMPEG_VAAPI -DHAVE_SWSCALE -Wno-deprecated-declarations `pkg-config --cflags x11` `pkg-config --cflags xext`
+CFLAGS= -DUSE_FFMPEG_VAAPI -DHAVE_SWSCALE -Wno-deprecated-declarations `pkg-config --cflags x11` `pkg-config --cflags xext` -fPIC
+#CFLAGS += -DUSE_OUTPUT_FILE
 LDFLAGS=-shared `pkg-config --libs x11` `pkg-config --libs xext` -lavcodec -lavformat -lswscale -lavutil -lva -lva-x11
-PLAYER_LDFLAGS=`pkg-config --libs x11` `pkg-config --libs xext` -lavcodec -lswscale -lavutil -lavformat -lva -lva-x11
+PLAYER_LDFLAGS=`pkg-config --libs x11` `pkg-config --libs xext` -lavcodec -lavformat -lswscale -lavutil -lva -lva-x11
 
-ifeq ($(shell getconf LONG_BIT), 32)
-PLATFORM = 32
-else
-PLATFORM = 64
-endif
-
-ifeq ($(PLATFORM), 32)
-CFLAGS += -D __CM_BOX_PLATFORM_32
-OUTPUT_DIR = ../lib32
-else
-PLATFORM = 64
-CFLAGS += -fPIC -D __CM_BOX_PLATFORM_64
-OUTPUT_DIR = ../lib64
-endif
 
 SOURCE_heads=ffmpeg.h image.h utils.h debug.h image.h sysdeps.h vaapi.h
 SOURCE_srcs= debug.c image.c utils.c ffmpeg.c vaapi.c

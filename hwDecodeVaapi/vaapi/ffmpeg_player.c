@@ -43,7 +43,6 @@ int main(int argc, const char *argv[])
 	AVCodecContext *pCodecCtx;  
 	AVCodec *pCodec;  
 	AVFrame *pFrame;  
-	AVFrame *pFrameRGB;  
     uint8_t *RGBAbuffer; 
 	AVPacket packet;  
 	int frameFinished;  
@@ -52,6 +51,8 @@ int main(int argc, const char *argv[])
     XImage *ximage;  // add rxhu
     struct timeval beginTv;
     struct timeval endTv;
+    FILE *pFile;
+	i = 0;  
 
 	av_register_all();
 
@@ -92,13 +93,6 @@ int main(int argc, const char *argv[])
 		return -1;  
 	}  
 
-//add rxhu
-	pFrameRGB = av_frame_alloc();  
-	if(pFrameRGB == NULL) {  
-		return -1;  
-	}  
-//end rxhu
-
 	printf("compress level:%d\n", pCodecCtx->compression_level);
 
 	numBytes = avpicture_get_size(AV_PIX_FMT_RGB32, pCodecCtx->width, pCodecCtx->height);  
@@ -107,41 +101,22 @@ int main(int argc, const char *argv[])
 	XResizeWindow(display, win, pCodecCtx->width, pCodecCtx->height);
 	XSync(display, False);
 
-// add rxhu
-#if 1
-    ximage = XShmCreateImage(display, DefaultVisual(display, 0), DefaultDepth(display, 0),
-            ZPixmap, 0, &shminfo, pCodecCtx->width, pCodecCtx->height);
-
-    shminfo.shmid = shmget(IPC_PRIVATE, numBytes, IPC_CREAT | 0777);
-    if (shminfo.shmid < 0) {
-        printf("[rxhu] the shmget failed!\n");
-        exit(-1);
-    }
-
-    shminfo.shmaddr = ximage->data = (unsigned char *)shmat(shminfo.shmid, 0, 0);
-    if(shminfo.shmaddr == (char *) -1)
-        exit(-1);
-
-    Image *image = image_create(pCodecCtx->width, pCodecCtx->height, IMAGE_BGRA, ximage->data);
+    pFile = fopen("output.yuv","w+");
+    Image *image = image_create(pCodecCtx->width, pCodecCtx->height, IMAGE_BGRA, NULL);
     if (!image) {
         printf("image create error\n");
+        return -1;
     }
 
-    avpicture_fill((AVPicture *)pFrameRGB, ximage->data, AV_PIX_FMT_RGB32, pCodecCtx->width, pCodecCtx->height);  
-
-    shminfo.readOnly = False;
-    XShmAttach(display, &shminfo);
-#endif
-// end rxhu
-	i = 0;  
 	while(av_read_frame(pFormatCtx, &packet) >=0) {  
 		if(packet.stream_index == videoStream) {  
 			avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);  
 			if(frameFinished) {
-			    //vaapi_display(win, pCodecCtx->width, pCodecCtx->height, (VASurfaceID)(uintptr_t)pFrame->data[3]);
                 gettimeofday(&beginTv,NULL);
-                get_image((VASurfaceID)(uintptr_t)pFrame->data[3], image); 
-                XShmPutImage(display, win, DefaultGC(display, 0), ximage, 0, 0, 0, 0, pCodecCtx->width, pCodecCtx->height, False);
+                get_image((VASurfaceID)(uintptr_t)pFrame->data[3], image, pFile); 
+                ximage = XCreateImage(display, DefaultVisual(display, DefaultScreen(display)),
+                    DefaultDepth(display, DefaultScreen(display)), ZPixmap, 0, image->pixels[0], pFrame->width, pFrame->height, 8, image->pitches[0]);
+                XPutImage (display, win, DefaultGC(display, 0), ximage, 0, 0, 0, 0, pFrame->width, pFrame->height);
                 XFlush(display);
                 gettimeofday(&endTv, NULL);
                 printf("[rxhu] decoded spend the time %ld ms\n",((endTv.tv_sec * 1000 + endTv.tv_usec / 1000) - (beginTv.tv_sec * 1000 + beginTv.tv_usec / 1000)));
@@ -151,8 +126,8 @@ int main(int argc, const char *argv[])
 		}  
 		av_free_packet(&packet);  
 	}  
+    fclose(pFile);
     XDestroyImage(ximage);
-	av_free(pFrameRGB);  
 	av_free(pFrame);
 	ffmpeg_vaapi_exit();
 	avcodec_close(pCodecCtx);  

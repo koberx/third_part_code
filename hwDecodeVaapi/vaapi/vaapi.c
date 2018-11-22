@@ -588,7 +588,7 @@ static int is_vaapi_rgb_format(const VAImageFormat *image_format)
 	return 0;
 }
 
-static int bind_image(VAImage *va_image, Image *image)
+static int bind_image(VAImage *va_image, Image *image, FILE *pFile)
 {
 	VAAPIContext * const vaapi = vaapi_get_context();
 	VAImageFormat * const va_format = &va_image->format;
@@ -621,10 +621,18 @@ static int bind_image(VAImage *va_image, Image *image)
 	image->width      = va_image->width;
 	image->height     = va_image->height;
 	image->num_planes = va_image->num_planes;
+    printf("va_image->num_planes = %d %d %d %d\n", va_image->num_planes, va_image->pitches[0],va_image->pitches[1],va_image->pitches[2]);
 	for (i = 0; i < va_image->num_planes; i++) {
 		image->pixels[i]  = (uint8_t *)va_image_data + va_image->offsets[i];
 		image->pitches[i] = va_image->pitches[i];
+#ifdef USE_OUTPUT_FILE
+        if(i == 0)
+            fwrite(image->pixels[i], 1, va_image->width * va_image->height, pFile);
+        else
+            fwrite(image->pixels[i], 1, va_image->width * va_image->height / 4, pFile);
+#endif
 	}
+
 	return 0;
 }
 
@@ -639,7 +647,7 @@ static int release_image(VAImage *va_image)
 	return 0;
 }
 
-int get_image(VASurfaceID surface, Image *dst_img)
+int get_image(VASurfaceID surface, Image *dst_img, FILE *pFile)
 {
 	VAAPIContext * const vaapi = vaapi_get_context();
 	VAImage image;
@@ -710,7 +718,7 @@ int get_image(VASurfaceID surface, Image *dst_img)
 		}
 	}
     printf("[rxhu] bind_image start to bind_image \n");
-	if (bind_image(&image, &bound_image) < 0)
+	if (bind_image(&image, &bound_image, pFile) < 0)
 		goto end;
 	is_bound_image = 1;
 	if (image_convert(dst_img, &bound_image) < 0) {

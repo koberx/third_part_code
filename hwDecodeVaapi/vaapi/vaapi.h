@@ -92,5 +92,5 @@ int vaapi_init_decoder(VAProfile        profile,
                        unsigned int     picture_height);
 
 extern int vaapi_display(Window window, int window_width, int window_height, VASurfaceID surface_id);
-extern int get_image(VASurfaceID surface, Image *dst_img);
+extern int get_image(VASurfaceID surface, Image *dst_img,  FILE *pFile);
 #endif /* VAAPI_H */
