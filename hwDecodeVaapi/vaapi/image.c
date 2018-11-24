@@ -36,6 +36,46 @@
 #undef  FOURCC
 #define FOURCC IMAGE_FOURCC
 
+Image *rgb_image_create(unsigned int width, unsigned int height, uint32_t format)
+{
+    
+    Image *img = NULL;
+    unsigned int i, size;
+    img = calloc(1, sizeof(*img));
+    if (!img) {
+        printf("[rxhu] image calloc failed!\n");
+        goto error;
+    }
+
+    img->format         = format;
+    img->width          = width;
+    img->height         = height;
+    size                = width * height;
+
+    img->pitches[0] = width * 4;
+
+    img->num_planes = 1;
+    img->offsets[0] = 0;
+    img->data_size  = img->pitches[0] * height;
+
+    if (!img->data_size)
+        goto error;
+
+    img->data = malloc(img->data_size);
+    img->is_out_data = 0;
+
+    if (!img->data)
+        goto error;
+
+    for (i = 0; i < img->num_planes; i++)
+        img->pixels[i] = img->data + img->offsets[i];
+    return img;
+        
+error:
+    free(img);
+    return NULL;    
+}
+
 Image *image_create(unsigned int width, unsigned int height, uint32_t format, uint8_t *data)
 {
 	unsigned int i, width2, height2, size2, size;

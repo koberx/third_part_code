@@ -100,5 +100,6 @@ uint32_t image_rgba_format(
 		);
 
 void image_draw_rectangle(Image *img, int x, int y, int w, int h, uint32_t c);
+extern Image *rgb_image_create(unsigned int width, unsigned int height, uint32_t format);
 
 #endif /* IMAGE_H */

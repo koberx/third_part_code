@@ -118,9 +118,9 @@ static enum AVPixelFormat get_format(struct AVCodecContext *avctx,
         case AV_CODEC_ID_VC1:
             profile = VAProfileVC1Advanced;
             break;
-        case AV_CODEC_ID_HEVC:
-            profile = VAProfileHEVCMain;
-            break;
+        //case AV_CODEC_ID_HEVC:
+        //    profile = VAProfileHEVCMain;
+        //    break;
         default:
             profile = -1;
             break;

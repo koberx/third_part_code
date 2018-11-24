@@ -536,8 +536,115 @@ static const uint32_t image_formats[] = {
 	VA_FOURCC('B','G','R','A'),
 	0
 };
+//add rxhu
+/*设置解码器格式*/
+int set_image_format(uint32_t fourcc, VAImageFormat **image_format)
+{
+	VAStatus status;
+	int i;
+	VAAPIContext * const vaapi = vaapi_get_context();
+	if (image_format)
+		*image_format = NULL;
+	if (!vaapi->image_formats || vaapi->n_image_formats == 0) {
+		vaapi->image_formats = calloc(vaMaxNumImageFormats(vaapi->display),
+				sizeof(vaapi->image_formats[0]));
+		if (!vaapi->image_formats) {
+			printf("[rxhu] vaMaxNumImageFormats calloc failed\n");
+			return -1;
+		}
 
-	static int
+		status = vaQueryImageFormats(vaapi->display,
+				vaapi->image_formats,
+				&vaapi->n_image_formats);
+		if (!vaapi_check_status(status, "vaQueryImageFormats()"))
+			return -1;
+        printf("[rxhu] come to here!\n"); 
+		D(bug("%d image formats\n", vaapi->n_image_formats));
+		for (i = 0; i < vaapi->n_image_formats; i++)
+			D(bug("  %s\n", string_of_VAImageFormat(&vaapi->image_formats[i])));
+	}
+
+	for (i = 0; i < vaapi->n_image_formats; i++) {
+		if (vaapi->image_formats[i].fourcc == fourcc) {
+			*image_format = &vaapi->image_formats[i];
+			break;
+		}
+	}
+
+	D(bug("selected %s image format for getimage\n",string_of_VAImageFormat(*image_format)));
+	
+	return 0;
+}
+
+int get_rgbx_picture(VASurfaceID surface, Image *dst_img,  VAImageFormat *image_format)
+{
+	VAImage image;
+	VAStatus status;
+	void *va_image_data;
+	VAAPIContext * const vaapi = vaapi_get_context();
+	image.image_id = VA_INVALID_ID;
+	image.buf      = VA_INVALID_ID;
+
+
+    D(bug("[rxhu] begin vaCreateImage %s\n", string_of_VAImageFormat(image_format)));
+	status = vaCreateImage(vaapi->display, image_format,vaapi->picture_width, vaapi->picture_height,&image);
+	if (!vaapi_check_status(status, "vaCreateImage()")) {
+		return -1;
+	}
+	D(bug("created image with id 0x%08x and buffer id 0x%08x\n",image.image_id, image.buf));
+
+	if (vaSyncSurface(vaapi->display, vaapi->context_id, surface)){
+		D(bug("vaSyncSurface failed\n"));
+		return -1;
+	}
+		
+
+
+	VARectangle src_rect;
+
+	src_rect.x      = 0;
+	src_rect.y      = 0;
+	src_rect.width  = vaapi->picture_width;
+	src_rect.height = vaapi->picture_height;
+
+	D(bug("src rect (%d,%d):%ux%u\n",src_rect.x, src_rect.y, src_rect.width, src_rect.height));
+
+	status = vaGetImage(vaapi->display, surface,src_rect.x, src_rect.y, src_rect.width, src_rect.height,image.image_id);
+	if (!vaapi_check_status(status, "vaGetImage()")) {
+			vaDestroyImage(vaapi->display, image.image_id);
+			return -1;
+	}
+
+	if (image.num_planes > MAX_IMAGE_PLANES)
+		return -1;
+
+	status = vaMapBuffer(vaapi->display, image.buf, &va_image_data);
+	if (!vaapi_check_status(status, "vaMapBuffer()"))
+		return -1;
+
+	dst_img->format     = image.format.fourcc;;
+	dst_img->width      = image.width;
+	dst_img->height     = image.height;
+	dst_img->num_planes = image.num_planes;
+   	dst_img->pitches[0] = image.pitches[0];
+    printf("[rxhu] %d %d", dst_img->pitches[0],image.pitches[0]);
+	memcpy(dst_img->pixels[0], (va_image_data + image.offsets[0]), (dst_img->pitches[0] * vaapi->picture_height));
+	status = vaUnmapBuffer(vaapi->display, image.buf);
+	if (!vaapi_check_status(status, "vaUnmapBuffer()"))
+		return -1;
+
+	if (image.image_id != VA_INVALID_ID) {
+		status = vaDestroyImage(vaapi->display, image.image_id);
+		if (!vaapi_check_status(status, "vaDestroyImage()"))
+			return -1;
+	}
+
+	return 0;
+	
+}
+//end add
+
+static int
 get_image_format(
 		VAAPIContext   *vaapi,
 		uint32_t        fourcc,
