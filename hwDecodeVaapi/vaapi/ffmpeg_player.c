@@ -18,6 +18,7 @@
 
 
 VAImageFormat *image_format = NULL;
+VAImage va_image;
 
 int main(int argc, const char *argv[]) 
 {
@@ -35,6 +36,8 @@ int main(int argc, const char *argv[])
     uint8_t *RGBAbuffer; 
     AVPacket packet;  
     XImage *ximage; 
+    struct timeval beginTv;
+    struct timeval endTv;
     /* check the number of the default screen for our X server. */
     /* find the ID of the root window of the screen. */
     /* create the window, as specified earlier. */
@@ -101,11 +104,17 @@ int main(int argc, const char *argv[])
         if(packet.stream_index == videoStream) {  
             avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);  
             if(frameFinished) {
-              get_rgbx_picture((VASurfaceID)(uintptr_t)pFrame->data[3], image,  image_format);
+                gettimeofday(&beginTv, NULL);
+                get_rgbx_picture((VASurfaceID)(uintptr_t)pFrame->data[3], &va_image, image,  image_format);
+#ifdef USE_OUTPUT_IMAGE
                 ximage = XCreateImage(display, DefaultVisual(display, DefaultScreen(display)),
                     DefaultDepth(display, DefaultScreen(display)), ZPixmap, 0, image->pixels[0], pFrame->width, pFrame->height, 8, image->pitches[0]);
                 XPutImage (display, win, DefaultGC(display, 0), ximage, 0, 0, 0, 0, pFrame->width, pFrame->height);
                 XFlush(display);             
+#endif
+                gettimeofday(&endTv, NULL);
+                printf("[rxhu] decoded spend the time %ld ms\n",((endTv.tv_sec * 1000 + endTv.tv_usec / 1000) - (beginTv.tv_sec * 1000 + beginTv.tv_usec / 1000)));
+                release_rgb_image(&va_image);
             } else {
                 printf("no frame decoded\n");
             }

@@ -93,6 +93,7 @@ int vaapi_init_decoder(VAProfile        profile,
 
 extern int vaapi_display(Window window, int window_width, int window_height, VASurfaceID surface_id);
 extern int get_image(VASurfaceID surface, Image *dst_img,  FILE *pFile);
-extern int get_rgbx_picture(VASurfaceID surface, Image *dst_img,  VAImageFormat *image_format);
+extern int get_rgbx_picture(VASurfaceID surface, VAImage *image,Image *dst_img,  VAImageFormat *image_format);
 extern int set_image_format(uint32_t fourcc, VAImageFormat **image_format);
+extern int release_rgb_image(VAImage *image);
 #endif /* VAAPI_H */
