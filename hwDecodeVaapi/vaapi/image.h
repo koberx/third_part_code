@@ -25,47 +25,6 @@
 
 #define MAX_IMAGE_PLANES 3
 
-#define IMAGE_FOURCC(ch0, ch1, ch2, ch3)        \
-	((uint32_t)(uint8_t) (ch0) |                \
-	 ((uint32_t)(uint8_t) (ch1) << 8) |         \
-	 ((uint32_t)(uint8_t) (ch2) << 16) |        \
-	 ((uint32_t)(uint8_t) (ch3) << 24 ))
-
-#define IS_RGB_IMAGE_FORMAT(FORMAT)                      \
-	((FORMAT) == IMAGE_ARGB || (FORMAT) == IMAGE_BGRA || \
-	 (FORMAT) == IMAGE_RGBA || (FORMAT) == IMAGE_ABGR)
-
-#ifdef WORDS_BIGENDIAN
-# define IMAGE_FORMAT_NE(be, le) IMAGE_##be
-#else
-# define IMAGE_FORMAT_NE(be, le) IMAGE_##le
-#endif
-
-// Planar YUV 4:2:0, 12-bit, 1 plane for Y and 1 plane for UV
-#define IMAGE_NV12   IMAGE_FOURCC('N','V','1','2')
-// Planar YUV 4:2:0, 12-bit, 3 planes for Y V U
-#define IMAGE_YV12   IMAGE_FOURCC('Y','V','1','2')
-// Planar YUV 4:2:0, 12-bit, 3 planes for Y U V
-#define IMAGE_IYUV   IMAGE_FOURCC('I','Y','U','V')
-#define IMAGE_I420   IMAGE_FOURCC('I','4','2','0')
-// Packed YUV 4:4:4, 32-bit, A Y U V
-#define IMAGE_AYUV   IMAGE_FOURCC('A','Y','U','V')
-// Packed YUV 4:2:2, 16-bit, Cb Y0 Cr Y1
-#define IMAGE_UYVY   IMAGE_FOURCC('U','Y','V','Y')
-// Packed YUV 4:2:2, 16-bit, Y0 Cb Y1 Cr
-#define IMAGE_YUY2   IMAGE_FOURCC('Y','U','Y','2')
-#define IMAGE_YUYV   IMAGE_FOURCC('Y','U','Y','V')
-// Packed RGB 8:8:8, 32-bit, A R G B, native endian byte-order
-#define IMAGE_RGB32  IMAGE_FORMAT_NE(RGBA, BGRA)
-// Packed RGB 8:8:8, 32-bit, A R G B
-#define IMAGE_ARGB   IMAGE_FOURCC('A','R','G','B')
-// Packed RGB 8:8:8, 32-bit, B G R A
-#define IMAGE_BGRA   IMAGE_FOURCC('B','G','R','A')
-// Packed RGB 8:8:8, 32-bit, R G B A
-#define IMAGE_RGBA   IMAGE_FOURCC('R','G','B','A')
-// Packed RGB 8:8:8, 32-bit, A B G R
-#define IMAGE_ABGR   IMAGE_FOURCC('A','B','G','R')
-
 typedef struct _Image Image;
 
 struct _Image {
@@ -81,25 +40,6 @@ struct _Image {
 	int		    is_out_data;
 };
 
-Image *image_create(unsigned int width, unsigned int height, uint32_t format, uint8_t *data);
-void image_destroy(Image *img);
-
-// Generate a random image, in RGB32 format
-Image *image_generate(unsigned int width, unsigned int height);
-
-// Convert images, applying scaling and color-space conversion, if required
-int image_convert(Image *dst_img, Image *src_img);
-
-uint32_t image_rgba_format(
-		int          bits_per_pixel,
-		int          is_msb_first,
-		unsigned int red_mask,
-		unsigned int green_mask,
-		unsigned int blue_mask,
-		unsigned int alpha_mask
-		);
-
-void image_draw_rectangle(Image *img, int x, int y, int w, int h, uint32_t c);
-extern Image *rgb_image_create(unsigned int width, unsigned int height, uint32_t format);
+extern Image *rgb_image_create(unsigned int width, unsigned int height);
 
 #endif /* IMAGE_H */

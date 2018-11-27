@@ -163,21 +163,3 @@ void delay_usec(unsigned int usec)
     } while (was_error && (errno == EINTR));
 }
 
-uint32_t gen_random_int(void)
-{
-    static int initialized = 0;
-
-    if (!initialized) {
-        srand(time(NULL));
-        initialized = 1;
-    }
-    return rand();
-}
-
-// Return a number in the range [ begin .. end - 1 ]
-uint32_t gen_random_int_range(uint32_t begin, uint32_t end)
-{
-    return (begin +
-            (uint32_t)((double)gen_random_int() /
-                       (RAND_MAX / (double)(end - begin) + 1.0)));
-}

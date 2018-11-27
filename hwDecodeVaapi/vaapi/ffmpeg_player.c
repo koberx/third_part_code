@@ -8,6 +8,7 @@
 #include <libavutil/avutil.h>  
 #include <libswscale/swscale.h>  
 #include <stdio.h>
+#include <unistd.h>
 
 #include "ffmpeg.h"
 #include "sysdeps.h"
@@ -94,7 +95,7 @@ int main(int argc, const char *argv[])
     XSync(display, False);
 
     set_image_format(VA_FOURCC_BGRX, &image_format);
-    Image *image = rgb_image_create(pCodecCtx->width, pCodecCtx->height, IMAGE_BGRA);
+    Image *image = rgb_image_create(pCodecCtx->width, pCodecCtx->height);
     if (!image) {
         printf("image create error\n");
        return -1;
@@ -121,8 +122,12 @@ int main(int argc, const char *argv[])
         }  
         av_free_packet(&packet);  
     }  
-
+    //XDestroyImage(ximage); 
+    av_free(pFrame);
     ffmpeg_vaapi_exit();
+    avcodec_close(pCodecCtx);  
+    avformat_close_input(&pFormatCtx);
+    return 0;
 }
 
 

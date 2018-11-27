@@ -36,6 +36,13 @@
 #define DEBUG 1
 #include "debug.h"
 
+typedef struct _Rectangle Rectangle;
+struct _Rectangle {
+	int x;
+	int y;
+	unsigned int width;
+	unsigned int height;
+};
 static VAAPIContext *vaapi_context;
 
 static inline const char *string_of_VAImageFormat(VAImageFormat *imgfmt)
@@ -174,16 +181,6 @@ int vaapi_init(VADisplay display)
 	}
 	free(display_attrs);
 
-#if 0
-	//if (common->use_vaapi_background_color) {
-		VADisplayAttribute attr;
-		attr.type  = VADisplayAttribBackgroundColor;
-		attr.value = common->vaapi_background_color;
-		status = vaSetDisplayAttributes(display, &attr, 1);
-		if (!vaapi_check_status(status, "vaSetDisplayAttributes()"))
-			return -1;
-	//}
-#endif
 
 	if ((vaapi = calloc(1, sizeof(*vaapi))) == NULL)
 		return -1;
@@ -205,11 +202,6 @@ int vaapi_exit(void)
 
 	if (!vaapi)
 		return 0;
-
-#if USE_GLX
-	if (display_type() == DISPLAY_GLX)
-		vaapi_glx_destroy_surface();
-#endif
 
 	destroy_buffers(vaapi->display, &vaapi->pic_param_buf_id, 1);
 	destroy_buffers(vaapi->display, &vaapi->iq_matrix_buf_id, 1);
@@ -524,19 +516,6 @@ int vaapi_init_decoder(VAProfile    profile,
 	return 0;
 }
 
-#if 1
-static const uint32_t image_formats[] = {
-	VA_FOURCC('R','G','B','A'),
-	VA_FOURCC('Y','V','1','2'),
-	VA_FOURCC('N','V','1','2'),
-	VA_FOURCC('U','Y','V','Y'),
-	VA_FOURCC('Y','U','Y','V'),
-	VA_FOURCC('A','R','G','B'),
-	VA_FOURCC('A','B','G','R'),
-	VA_FOURCC('B','G','R','A'),
-	0
-};
-//add rxhu
 /*设置解码器格式*/
 int set_image_format(uint32_t fourcc, VAImageFormat **image_format)
 {
@@ -646,276 +625,5 @@ int release_rgb_image(VAImage *image)
     }
 
 }
-//end add
 
-static int
-get_image_format(
-		VAAPIContext   *vaapi,
-		uint32_t        fourcc,
-		VAImageFormat **image_format
-		)
-{
-	VAStatus status;
-	int i;
 
-	if (image_format)
-		*image_format = NULL;
-	if (!vaapi->image_formats || vaapi->n_image_formats == 0) {
-		vaapi->image_formats = calloc(vaMaxNumImageFormats(vaapi->display),
-				sizeof(vaapi->image_formats[0]));
-		if (!vaapi->image_formats)
-			return 0;
-
-		status = vaQueryImageFormats(vaapi->display,
-				vaapi->image_formats,
-				&vaapi->n_image_formats);
-		if (!vaapi_check_status(status, "vaQueryImageFormats()"))
-			return 0;
-        printf("rxhu come to here!\n"); 
-		D(bug("%d image formats\n", vaapi->n_image_formats));
-		for (i = 0; i < vaapi->n_image_formats; i++)
-			D(bug("  %s\n", string_of_VAImageFormat(&vaapi->image_formats[i])));
-	}
-
-	for (i = 0; i < vaapi->n_image_formats; i++) {
-		if (vaapi->image_formats[i].fourcc == fourcc) {
-			if (image_format)
-				*image_format = &vaapi->image_formats[i];
-			return 1;
-		}
-	}
-	return 0;
-}
-
-static int is_vaapi_rgb_format(const VAImageFormat *image_format)
-{
-	switch (image_format->fourcc) {
-		case VA_FOURCC('A','R','G','B'):
-		case VA_FOURCC('A','B','G','R'):
-		case VA_FOURCC('B','G','R','A'):
-		case VA_FOURCC('R','G','B','A'):
-			return 1;
-	}
-	return 0;
-}
-
-static int bind_image(VAImage *va_image, Image *image, FILE *pFile)
-{
-	VAAPIContext * const vaapi = vaapi_get_context();
-	VAImageFormat * const va_format = &va_image->format;
-	VAStatus status;
-	void *va_image_data;
-	unsigned int i;
-
-	if (va_image->num_planes > MAX_IMAGE_PLANES)
-		return -1;
-
-	status = vaMapBuffer(vaapi->display, va_image->buf, &va_image_data);
-	if (!vaapi_check_status(status, "vaMapBuffer()"))
-		return -1;
-
-	memset(image, 0, sizeof(*image));
-	image->format = va_format->fourcc;
-	if (is_vaapi_rgb_format(va_format)) {
-		image->format = image_rgba_format(
-				va_format->bits_per_pixel,
-				va_format->byte_order == VA_MSB_FIRST,
-				va_format->red_mask,
-				va_format->green_mask,
-				va_format->blue_mask,
-				va_format->alpha_mask
-				);
-		if (!image->format)
-			return -1;
-	}
-
-	image->width      = va_image->width;
-	image->height     = va_image->height;
-	image->num_planes = va_image->num_planes;
-    printf("va_image->num_planes = %d %d %d %d\n", va_image->num_planes, va_image->pitches[0],va_image->pitches[1],va_image->pitches[2]);
-	for (i = 0; i < va_image->num_planes; i++) {
-		image->pixels[i]  = (uint8_t *)va_image_data + va_image->offsets[i];
-		image->pitches[i] = va_image->pitches[i];
-#ifdef USE_OUTPUT_FILE
-        if(i == 0)
-            fwrite(image->pixels[i], 1, va_image->width * va_image->height, pFile);
-        else
-            fwrite(image->pixels[i], 1, va_image->width * va_image->height / 4, pFile);
-#endif
-	}
-
-	return 0;
-}
-
-static int release_image(VAImage *va_image)
-{
-	VAAPIContext * const vaapi = vaapi_get_context();
-	VAStatus status;
-
-	status = vaUnmapBuffer(vaapi->display, va_image->buf);
-	if (!vaapi_check_status(status, "vaUnmapBuffer()"))
-		return -1;
-	return 0;
-}
-
-int get_image(VASurfaceID surface, Image *dst_img, FILE *pFile)
-{
-	VAAPIContext * const vaapi = vaapi_get_context();
-	VAImage image;
-	VAImageFormat *image_format = NULL;
-	VAStatus status;
-	Image bound_image;
-	int i, is_bound_image = 0, is_derived_image = 0, error = -1;
-
-	image.image_id = VA_INVALID_ID;
-	image.buf      = VA_INVALID_ID;
-
-	if (vaSyncSurface(vaapi->display, vaapi->context_id, surface))
-		D(bug("vaSyncSurface failed\n"));
-#if 0
-	if (!image_format) {
-		status = vaDeriveImage(vaapi->display, surface, &image);
-		if (vaapi_check_status(status, "vaDeriveImage()")) {
-			if (image.image_id != VA_INVALID_ID && image.buf != VA_INVALID_ID) {
-				D(bug("using vaDeriveImage()\n"));
-				is_derived_image = 1;
-				image_format = &image.format;
-			}
-			else {
-				D(bug("vaDeriveImage() returned success but VA image is invalid. Trying vaGetImage()\n"));
-			}
-		}
-	}
-#endif
-	if (!image_format) {
-		for (i = 0; image_formats[i] != 0; i++) {
-			if (get_image_format(vaapi, image_formats[i], &image_format))
-				break;
-		}
-	}
-
-	if (!image_format)
-		goto end;
-	D(bug("selected %s image format for getimage\n",
-				string_of_VAImageFormat(image_format)));
-
-	if (!is_derived_image) {
-		status = vaCreateImage(vaapi->display, image_format,
-				vaapi->picture_width, vaapi->picture_height,
-				&image);
-		if (!vaapi_check_status(status, "vaCreateImage()"))
-			goto end;
-		D(bug("created image with id 0x%08x and buffer id 0x%08x\n",
-					image.image_id, image.buf));
-
-		VARectangle src_rect;
-
-		src_rect.x      = 0;
-		src_rect.y      = 0;
-		src_rect.width  = vaapi->picture_width;
-		src_rect.height = vaapi->picture_height;
-
-		D(bug("src rect (%d,%d):%ux%u\n",
-					src_rect.x, src_rect.y, src_rect.width, src_rect.height));
-
-		status = vaGetImage(
-				vaapi->display, surface,
-				src_rect.x, src_rect.y, src_rect.width, src_rect.height,
-				image.image_id
-				);
-		if (!vaapi_check_status(status, "vaGetImage()")) {
-			vaDestroyImage(vaapi->display, image.image_id);
-			goto end;
-		}
-	}
-    printf("[rxhu] bind_image start to bind_image \n");
-	if (bind_image(&image, &bound_image, pFile) < 0)
-		goto end;
-	is_bound_image = 1;
-	if (image_convert(dst_img, &bound_image) < 0) {
-		goto end;
-    }
-
-	error = 0;
-end:
-	if (is_bound_image) {
-		if (release_image(&image) < 0)
-			error = -1;
-	}
-
-	if (image.image_id != VA_INVALID_ID) {
-		status = vaDestroyImage(vaapi->display, image.image_id);
-		if (!vaapi_check_status(status, "vaDestroyImage()"))
-			error = -1;
-	}
-	return error;
-}
-#endif
-
-typedef struct _Rectangle Rectangle;
-struct _Rectangle {
-	int x;
-	int y;
-	unsigned int width;
-	unsigned int height;
-};
-
-int get_colorspace_flags(int pic_width, int pic_height)
-{
-	int csp = 0;
-	return csp;
-}
-
-int vaapi_display(Window window, int window_width, int window_height, VASurfaceID surface_id)
-{
-	VAAPIContext * const vaapi = vaapi_get_context();
-	unsigned int vaPutSurface_count = 0;
-	unsigned int flags = VA_FRAME_PICTURE;
-	VAStatus status;
-	Drawable drawable;
-
-	if (!vaapi)
-		return -1;
-
-	drawable = window;
-
-	{
-		Rectangle src_rect, dst_rect;
-
-		src_rect.x      = 0;
-		src_rect.y      = 0;
-		src_rect.width  = vaapi->picture_width;
-		src_rect.height = vaapi->picture_height;
-
-		dst_rect.x      = 0;
-		dst_rect.y      = 0;
-		dst_rect.width  = window_width;
-		dst_rect.height = window_height;
-
-		//flags |= VA_CLEAR_DRAWABLE;
-
-		status = vaPutSurface(vaapi->display, surface_id, drawable,
-				src_rect.x, src_rect.y,
-				src_rect.width, src_rect.height,
-				dst_rect.x, dst_rect.y,
-				dst_rect.width, dst_rect.height,
-				NULL, 0, flags);
-		if (!vaapi_check_status(status, "vaPutSurface()"))
-			return -1;
-		++vaPutSurface_count;
-
-	}
-
-#if 0
-	if (vaPutSurface_count > 1) {
-		/* We don't have to call vaSyncSurface() explicitly. However,
-		   if we use multiple vaPutSurface() and subwindows, we probably
-		   want the surfaces to be presented at the same time */
-		status = vaSyncSurface(vaapi->display, vaapi->context_id,
-				surface_id);
-		if (!vaapi_check_status(status, "vaSyncSurface() for display"))
-			return -1;
-	}
-#endif
-	return 0;
-}
