@@ -555,28 +555,34 @@ int set_image_format(uint32_t fourcc, VAImageFormat **image_format)
 	return 0;
 }
 
-int get_rgbx_picture(VASurfaceID surface, VAImage *image,Image *dst_img,  VAImageFormat *image_format)
+int create_rgbx_image(VAImage *image,VAImageFormat *image_format)
+{
+	VAAPIContext * const vaapi = vaapi_get_context();
+	VAStatus status;
+	image->image_id = VA_INVALID_ID;
+        image->buf      = VA_INVALID_ID;
+	D(bug("[rxhu] begin vaCreateImage %s\n", string_of_VAImageFormat(image_format)));
+	status = vaCreateImage(vaapi->display, image_format,vaapi->picture_width, vaapi->picture_height,image);
+	 if (!vaapi_check_status(status, "vaCreateImage()")) {
+        return -1;
+    }
+	D(bug("created image with id 0x%08x and buffer id 0x%08x\n",image->image_id, image->buf));
+
+	return 0;
+}
+
+int get_rgbx_picture(VASurfaceID surface, VAImage *image, uint8_t **data,  VAImageFormat *image_format)
 {
     VAStatus status;
     void *va_image_data;
     VAAPIContext * const vaapi = vaapi_get_context();
-    image->image_id = VA_INVALID_ID;
-    image->buf      = VA_INVALID_ID;
+    //image->image_id = VA_INVALID_ID;
+    //image->buf      = VA_INVALID_ID;
 
-
-    D(bug("[rxhu] begin vaCreateImage %s\n", string_of_VAImageFormat(image_format)));
-    status = vaCreateImage(vaapi->display, image_format,vaapi->picture_width, vaapi->picture_height,image);
-    if (!vaapi_check_status(status, "vaCreateImage()")) {
-        return -1;
-    }
-    D(bug("created image with id 0x%08x and buffer id 0x%08x\n",image->image_id, image->buf));
-
-    if (vaSyncSurface(vaapi->display, vaapi->context_id, surface)){
+    if (vaSyncSurface(vaapi->display, vaapi->context_id, surface)) {
         D(bug("vaSyncSurface failed\n"));
         return -1;
     }
-        
-
 
     VARectangle src_rect;
 
@@ -586,7 +592,7 @@ int get_rgbx_picture(VASurfaceID surface, VAImage *image,Image *dst_img,  VAImag
     src_rect.height = vaapi->picture_height;
 
     D(bug("src rect (%d,%d):%ux%u\n",src_rect.x, src_rect.y, src_rect.width, src_rect.height));
-
+    printf("[rxhu] the image->id = 0x%08x image->buf_id = 0x%08x\n",image->image_id,image->buf);
     status = vaGetImage(vaapi->display, surface,src_rect.x, src_rect.y, src_rect.width, src_rect.height,image->image_id);
     if (!vaapi_check_status(status, "vaGetImage()")) {
             vaDestroyImage(vaapi->display, image->image_id);
@@ -600,13 +606,8 @@ int get_rgbx_picture(VASurfaceID surface, VAImage *image,Image *dst_img,  VAImag
     if (!vaapi_check_status(status, "vaMapBuffer()"))
         return -1;
 
-    dst_img->format     = image->format.fourcc;;
-    dst_img->width      = image->width;
-    dst_img->height     = image->height;
-    dst_img->num_planes = image->num_planes;
-    dst_img->pitches[0] = image->pitches[0];
-    printf("[rxhu] %d %d", dst_img->pitches[0],image->pitches[0]);
-    dst_img->pixels[0] = va_image_data + image->offsets[0];
+    
+    *data = va_image_data + image->offsets[0];
     return 0;
 }
 
