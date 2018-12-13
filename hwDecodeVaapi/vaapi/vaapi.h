@@ -46,6 +46,8 @@ struct _VAAPIContext {
     VASurfaceID         surface_ids[MAX_VIDEO_SURFACES];
     int			surface_nums;
     int			surface_index;
+    int         surface_head;
+    int         surface_tail;
     VASubpictureID      subpic_ids[5];
     VAImage             subpic_image;
     VAProfile           profile;

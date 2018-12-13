@@ -302,8 +302,8 @@ int main(int argc, const char *argv[])
 	thpool_wait(thpool);
 	thpool_destroy(thpool);
 	av_free(decoder->pFrame);
-    ffmpeg_vaapi_exit();
     avcodec_close(decoder->pCodecCtx);  
+    ffmpeg_vaapi_exit();
     avformat_close_input(&decoder->pFormatCtx);
 	free(decoder);
     return 0;

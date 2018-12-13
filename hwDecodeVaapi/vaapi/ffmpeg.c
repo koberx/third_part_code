@@ -137,53 +137,40 @@ static enum AVPixelFormat get_format(struct AVCodecContext *avctx,
     }
     return AV_PIX_FMT_NONE;
 }
+
 static void release_buffer(void *avctx, uint8_t *data)
 {
-    data = NULL;
+    VAAPIContext * const vaapi = vaapi_get_context();
+    void *surface;
+    surface = (void *)(uintptr_t)vaapi->surface_ids[vaapi->surface_tail];
+    vaapi->surface_ids[vaapi->surface_tail] = (VASurfaceID)(uintptr_t)data;
+    vaapi->surface_tail = (vaapi->surface_tail + 1) % vaapi->surface_nums;
 }
 
-static int get_buffer(struct AVCodecContext *avctx, AVFrame *pic, int flags)
+static int get_buffer(struct AVCodecContext *avctx, AVFrame *frame, int flags)
 {
-#if 0
     VAAPIContext * const vaapi = vaapi_get_context();
-    void *surface = (void *)(uintptr_t)vaapi->surface_ids[vaapi->surface_index];
-    vaapi->surface_index++;
-    vaapi->surface_index = vaapi->surface_index % vaapi->surface_nums;
+    void *surface;
+    AVBufferRef *buf;
+    if (!(avctx->codec->capabilities & AV_CODEC_CAP_DR1))
+        return avcodec_default_get_buffer2(avctx, frame, flags);
 
-    pic->data[0]        = surface;
-    pic->data[1]        = NULL;
-    pic->data[2]        = NULL;
-    pic->data[3]        = surface;
-    pic->linesize[0]    = 0;
-    pic->linesize[1]    = 0;
-    pic->linesize[2]    = 0;
-    pic->linesize[3]    = 0;
-
-    return avcodec_default_get_buffer2(avctx, pic, flags);
-#else 
-    VAAPIContext * const vaapi = vaapi_get_context();
-    AVBufferRef *surf_buf;
-    AVBufferRef *surf_buf_data3;
-    void *surface = (void *)(uintptr_t)vaapi->surface_ids[vaapi->surface_index];
-    vaapi->surface_index++;
-    vaapi->surface_index = vaapi->surface_index % vaapi->surface_nums;
-    pic->data[0] = (uint8_t*) surface;
-    pic->data[1] = NULL;
-    pic->data[2] = NULL;
-    pic->data[3] = (uint8_t*) surface;
-    pic->linesize[0] = 0;
-    pic->linesize[1] = 0;
-    pic->linesize[2] = 0;
-    pic->linesize[3] = 0;
-
-    surf_buf = av_buffer_create(pic->data[0], 0, release_buffer,
-                                  NULL, AV_BUFFER_FLAG_READONLY);
-    surf_buf_data3 = av_buffer_create(pic->data[3], 0, release_buffer,
-                                  NULL, AV_BUFFER_FLAG_READONLY);
-    pic->buf[0] = surf_buf;
-    pic->buf[3] = surf_buf_data3;
+    surface = (void *)(uintptr_t)vaapi->surface_ids[vaapi->surface_head];
+    vaapi->surface_head = (vaapi->surface_head + 1) % vaapi->surface_nums;
+    buf = av_buffer_create((uint8_t *)surface, 0,(void (*)(void *, uint8_t *))release_buffer, avctx,
+        AV_BUFFER_FLAG_READONLY);
+    if (!buf) {
+        release_buffer(avctx, surface);
+        return -1;
+    }
+    frame->buf[0] = buf;
+    memset(frame->data, 0, sizeof(frame->data));
+    frame->data[0] = (uint8_t *)(uintptr_t)surface;
+    frame->data[3] = (uint8_t *)(uintptr_t)surface;
+    memset(frame->linesize, 0, sizeof(frame->linesize));
+    frame->linesize[0] = avctx->coded_width; /* XXX: 8-bit per sample only */   
+    frame->data[5] = surface;
     return 0;
-#endif
 }
 
 #endif
@@ -194,8 +181,6 @@ int ffmpeg_init_context(AVCodecContext *avctx)
         avctx->thread_count    = 1;
         avctx->get_format      = get_format;
         avctx->get_buffer2      = get_buffer;
-        //avctx->reget_buffer    = get_buffer;
-        //avctx->release_buffer  = release_buffer;
         avctx->draw_horiz_band = NULL;
         avctx->slice_flags     = SLICE_FLAG_CODED_ORDER|SLICE_FLAG_ALLOW_FIELD;
 #endif

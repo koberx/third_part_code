@@ -187,6 +187,8 @@ int vaapi_init(VADisplay display)
 	vaapi->display               = display;
 	vaapi->surface_index = 0;
 	vaapi->surface_nums = 0;
+    vaapi->surface_tail = 0;
+    vaapi->surface_head = 0;
 	vaapi->subpic_image.image_id = VA_INVALID_ID;
 	for (i = 0; i < ARRAY_ELEMS(vaapi->subpic_ids); i++)
 		vaapi->subpic_ids[i]     = VA_INVALID_ID;
