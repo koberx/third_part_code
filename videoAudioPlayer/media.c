@@ -12,6 +12,12 @@ void localPacketReadThread(void *arg)
 				break;
 			}
 			av_packet_unref(packet);
+		} else if (packet->stream_index == mediaContext->audioStream.audio_index) {
+			if (audio_packet_enque(mediaContext, packet) == false) {
+				printf("[rxhu] audio_packet_enque failed!\n");
+				break;
+			}
+			av_packet_unref(packet);
 		} else {
 			av_packet_unref(packet);
 		}		
@@ -21,6 +27,11 @@ void localPacketReadThread(void *arg)
 	 mediaContext->readThreadExit = true;
 	 pthread_cond_broadcast(&mediaContext->videoStream.packetQueueCond);
 	 pthread_mutex_unlock(&mediaContext->videoStream.packetQueueMtx);
+
+	 pthread_mutex_lock(&mediaContext->audioStream.packetQueueMtxAudio);
+	 mediaContext->readThreadExit = true;
+	 pthread_cond_broadcast(&mediaContext->audioStream.packetQueueCondAudio);
+	 pthread_mutex_unlock(&mediaContext->audioStream.packetQueueMtxAudio);
 	 av_packet_free(&packet);
 }
 
@@ -94,7 +105,88 @@ void localVideoFrameShowThread(void * arg)
 	}
 }
 
+void localAudioPacketPlayThread(void * arg)
+{
+	player_t    *mediaContext = (player_t *)arg;
+	AVPacket 	packet;
+	AVFrame     *frame = av_frame_alloc();
+	int ret;
+	int got_frame;
+	int out_buffer_size;
+	while (true) {
+		if (audio_packet_deque(mediaContext, &packet) == false) {
+			printf("[rxhu] audio_packet_deque failed!\n");
+			break;
+		}
+		ret = avcodec_decode_audio4(mediaContext->audioStream.audioCodecCtx, frame, &got_frame, &packet);
+        if (ret < 0) {
+        	printf("[rxhu] audio decode the frame finish\n");
+			break;
+        }
+		if (got_frame) {
+			swr_convert(mediaContext->audioStream.audioSwrContext, &mediaContext->audioStream.out_buffer, 2 * mediaContext->audioStream.out_sample_rate, 
+				(const uint8_t **)frame->data, frame->nb_samples);
+
+			out_buffer_size = av_samples_get_buffer_size(NULL, mediaContext->audioStream.out_channel_nb, frame->nb_samples,
+                       mediaContext->audioStream.out_sample_fmt, 1);
+
+			if (snd_pcm_writei(mediaContext->audioStream.pcm, mediaContext->audioStream.out_buffer, out_buffer_size / 2) < 0) {
+				printf("[rxhu] can't send the pcm to the sound card!\n");
+				break;
+			}
+		}
+		
+	}
+}
+
+
 /* function */
+bool audio_packet_enque(player_t *mediaContext, AVPacket *packet)
+{
+	packetData_t *packetData;
+	packetData = (packetData_t *)malloc(sizeof(packetData_t));
+    if (packetData == NULL) {
+        printf("[rxhu] malloc the packetData_t failed\n");
+        return false;
+    }
+	packetData->packet = av_packet_alloc();
+    if (av_packet_ref(packetData->packet, packet) < 0) {
+        return false;
+    }
+	pthread_mutex_lock(&mediaContext->audioStream.packetQueueMtxAudio);
+    list_add_tail(&packetData->list, &mediaContext->audioStream.audioPacketQueue);
+    mediaContext->audioStream.packetSizeAudio++;
+    pthread_cond_broadcast(&mediaContext->audioStream.packetQueueCondAudio);
+    pthread_mutex_unlock(&mediaContext->audioStream.packetQueueMtxAudio);
+    return true;
+}
+
+bool audio_packet_deque(player_t * mediaContext, AVPacket * packet)
+{
+	packetData_t *data_pos, *n;
+    pthread_mutex_lock(&mediaContext->audioStream.packetQueueMtxAudio);
+    while(list_empty (&mediaContext->audioStream.audioPacketQueue)) {
+        if (mediaContext->readThreadExit == true) {
+            printf("[rxhu] audio_packet_deque get readThreadExit signal\n");
+            return false;
+        } else {
+            pthread_cond_wait(&mediaContext->audioStream.packetQueueCondAudio, &mediaContext->audioStream.packetQueueMtxAudio);
+       }
+    }
+    list_for_each_entry_safe(data_pos, n, &mediaContext->audioStream.audioPacketQueue, list) {
+        list_del(&data_pos->list);
+        mediaContext->audioStream.packetSizeAudio--;
+        break;
+    }
+    pthread_mutex_unlock(&mediaContext->audioStream.packetQueueMtxAudio);
+    if (av_packet_ref(packet, data_pos->packet) < 0) {
+        return false;
+    }
+    av_packet_free(&data_pos->packet);
+    free(data_pos);
+    return true;
+}
+
 bool video_packet_enque(player_t *mediaContext, AVPacket *packet)
 {
     packetData_t *packetData;
@@ -246,6 +338,8 @@ int openInput(player_t *mediaContext, char *mediaFile)
 	AVCodec				*pCodecAudio;
 	AVCodecContext		*audioCodecCtx;
 
+	int i;
+
 	pFormatCtx = avformat_alloc_context();
     pFrameRGB = av_frame_alloc();
 
@@ -260,7 +354,12 @@ int openInput(player_t *mediaContext, char *mediaFile)
     }
 
     video_index = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, video_index, -1, NULL, 0); // video stream
-	audio_index = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_AUDIO, audio_index, -1, NULL, 0); // audio stream
+	for (i = 0; i < pFormatCtx->nb_streams; i++) {
+        if (pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+            audio_index = i;
+            break;
+        }
+    }
     
     if (video_index >= 0) {  // video stream init
         videoCodecCtx = pFormatCtx->streams[video_index]->codec;
@@ -308,6 +407,7 @@ int openInput(player_t *mediaContext, char *mediaFile)
 	mediaContext->videoStream.videoCodecCtx = videoCodecCtx;
 	mediaContext->videoStream.img_convert_ctx = img_convert_ctx;
 	mediaContext->videoStream.video_index = video_index;
+	mediaContext->audioStream.audio_index = audio_index;
 	mediaContext->pFormatCtx = pFormatCtx;
 	mediaContext->videoStream.displayFrame = pFrameRGB;
 	mediaContext->audioStream.audioCodecCtx = audioCodecCtx;

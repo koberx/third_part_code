@@ -3,9 +3,9 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>      /* BitmapOpenFailed, etc. */
-#include <sys/shm.h>
-#include <X11/extensions/XShm.h>
-
+//#include <sys/shm.h>
+//#include <X11/extensions/XShm.h>
+#include <pthread.h>
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/avutil.h>
@@ -65,6 +65,11 @@ typedef struct {
 	uint8_t 			*out_buffer;
 	snd_pcm_t           *pcm;
     snd_pcm_hw_params_t *params;
+	int					audio_index;
+	int                 packetSizeAudio;
+	struct list_head    audioPacketQueue;
+	pthread_mutex_t     packetQueueMtxAudio;
+    pthread_cond_t      packetQueueCondAudio;
 }audioStream_t;
 
 typedef struct {
@@ -79,6 +84,8 @@ typedef struct {
 
 extern bool video_packet_enque(player_t *mediaContext, AVPacket *packet);
 extern bool video_packet_deque(player_t *mediaContext, AVPacket *packet);
+extern bool audio_packet_enque(player_t *mediaContext, AVPacket *packet);
+extern bool audio_packet_deque(player_t * mediaContext, AVPacket * packet);
 extern bool video_frame_enque(player_t *mediaContext, AVFrame *frame);
 extern frameData_t *video_frame_deque(player_t *mediaContext);
 extern int openInput(player_t *mediaContext, char *mediaFile);
@@ -88,6 +95,7 @@ extern void mediaDeinit(player_t *mediaContext);
 extern void localPacketReadThread(void *arg);
 extern void localVideoPacketDecodeThread(void * arg);
 extern void localVideoFrameShowThread(void * arg);
+extern void localAudioPacketPlayThread(void * arg);
 extern void msleep(int ms);
 extern void pcmClose(player_t *mediaContext);
 extern int initPcmDevice(player_t *mediaContext);

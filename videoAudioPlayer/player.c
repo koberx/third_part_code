@@ -14,6 +14,8 @@ int main(int argc,char *argv[])
 	//init the list
     INIT_LIST_HEAD(&mediaContext->videoStream.videoPacketQueue);
     INIT_LIST_HEAD(&mediaContext->videoStream.videoFrameQueue);
+	INIT_LIST_HEAD(&mediaContext->audioStream.audioPacketQueue);
+	mediaContext->audioStream.packetSizeAudio = 0;
     mediaContext->videoStream.packetSize = 0;
     mediaContext->videoStream.frameSize = 0;
     mediaContext->decThreadExit = false;
@@ -35,6 +37,7 @@ int main(int argc,char *argv[])
 	thpool_add_work(mediaContext->thpool, localPacketReadThread, mediaContext);
 	thpool_add_work(mediaContext->thpool, localVideoPacketDecodeThread, mediaContext);
 	thpool_add_work(mediaContext->thpool, localVideoFrameShowThread, mediaContext);	
+	thpool_add_work(mediaContext->thpool, localAudioPacketPlayThread, mediaContext);	
 	thpool_wait(mediaContext->thpool);
     thpool_destroy(mediaContext->thpool);
 	mediaDeinit(mediaContext);
