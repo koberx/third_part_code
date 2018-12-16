@@ -2,7 +2,7 @@
 int main(int argc,char *argv[])
 {
 	int ret;
-    avcodec_register_all();
+//    avcodec_register_all();
     av_register_all();
 	
 	player_t    * mediaContext = (player_t *)malloc(sizeof(player_t));

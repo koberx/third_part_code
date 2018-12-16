@@ -113,6 +113,13 @@ void localAudioPacketPlayThread(void * arg)
 	int ret;
 	int got_frame;
 	int out_buffer_size;
+	audioParamInit(mediaContext, mediaContext->audioStream.audioCodecCtx, mediaContext->audioStream.pCodecAudio);
+    ret = initPcmDevice(mediaContext);
+    if (ret < 0) {
+    	printf("[rxhu] initPcmDevice init failed!\n");
+        return ;
+    }
+
 	while (true) {
 		if (audio_packet_deque(mediaContext, &packet) == false) {
 			printf("[rxhu] audio_packet_deque failed!\n");
@@ -129,16 +136,15 @@ void localAudioPacketPlayThread(void * arg)
 
 			out_buffer_size = av_samples_get_buffer_size(NULL, mediaContext->audioStream.out_channel_nb, frame->nb_samples,
                        mediaContext->audioStream.out_sample_fmt, 1);
-
-			if (snd_pcm_writei(mediaContext->audioStream.pcm, mediaContext->audioStream.out_buffer, out_buffer_size / 2) < 0) {
-				printf("[rxhu] can't send the pcm to the sound card!\n");
+			if ((ret = snd_pcm_writei(mediaContext->audioStream.pcm, mediaContext->audioStream.out_buffer, out_buffer_size / 4)) < 0) {
+				printf("[rxhu] can't send the pcm to the sound card! ret = %d %s\n", ret, snd_strerror(ret));
 				break;
 			}
 		}
 		
 	}
+	av_frame_free(&frame);
 }
-
 
 /* function */
 bool audio_packet_enque(player_t *mediaContext, AVPacket *packet)
@@ -393,12 +399,6 @@ int openInput(player_t *mediaContext, char *mediaFile)
 			printf("[rxhu] can't open the audioCodecCtx \n");
 			return -1;
 		}
-		audioParamInit(mediaContext, audioCodecCtx, pCodecAudio);
-		ret = initPcmDevice(mediaContext);
-		if (ret < 0) {
-			printf("[rxhu] initPcmDevice init failed!\n");
-			return -1;
-		}
 	}
 
     av_dump_format(pFormatCtx,0, 0, 0);
@@ -418,107 +418,81 @@ int openInput(player_t *mediaContext, char *mediaFile)
 
 void audioParamInit(player_t *mediaContext, AVCodecContext	*audioCodecCtx,AVCodec	*pCodecAudio)
 {
-	SwrContext	*audioSwrContext;
-	enum AVSampleFormat in_sample_fmt;
-	enum AVSampleFormat out_sample_fmt;
-	int 				in_sample_rate;
-	int 				out_sample_rate;
-	uint64_t 			in_ch_layout;
-	uint64_t 			out_ch_layout;
-	int 				out_channel_nb;
-	uint8_t 			*out_buffer;
+	mediaContext->audioStream.audioSwrContext = swr_alloc();
+	mediaContext->audioStream.in_sample_fmt = audioCodecCtx->sample_fmt;
+	mediaContext->audioStream.out_sample_fmt = AV_SAMPLE_FMT_S16;
+	mediaContext->audioStream.in_sample_rate = audioCodecCtx->sample_rate;
+	mediaContext->audioStream.out_sample_rate = audioCodecCtx->sample_rate;
+	mediaContext->audioStream.in_ch_layout = audioCodecCtx->channel_layout;
+	mediaContext->audioStream.out_ch_layout = audioCodecCtx->channel_layout;
 
-	audioSwrContext = swr_alloc();
-	in_sample_rate = audioCodecCtx->sample_fmt;
-	out_sample_fmt = AV_SAMPLE_FMT_S16;
-	in_sample_rate = audioCodecCtx->sample_rate;
-	out_sample_rate = audioCodecCtx->sample_rate;
-	in_ch_layout = audioCodecCtx->channel_layout;
-	out_ch_layout = AV_CH_LAYOUT_MONO;
+	swr_alloc_set_opts(mediaContext->audioStream.audioSwrContext, mediaContext->audioStream.out_ch_layout, 
+		mediaContext->audioStream.out_sample_fmt, mediaContext->audioStream.out_sample_rate, mediaContext->audioStream.in_ch_layout, 
+		mediaContext->audioStream.in_sample_fmt, mediaContext->audioStream.in_sample_rate, 0, NULL);
+	swr_init(mediaContext->audioStream.audioSwrContext);
+	mediaContext->audioStream.out_channel_nb = av_get_channel_layout_nb_channels(mediaContext->audioStream.out_ch_layout);
+	mediaContext->audioStream.out_buffer = (uint8_t *) av_malloc(2 * mediaContext->audioStream.out_sample_rate);
 
-	swr_alloc_set_opts(audioSwrContext, out_ch_layout, out_sample_fmt, out_sample_rate, in_ch_layout, in_sample_fmt,
-            in_sample_rate, 0, NULL);
-	swr_init(audioSwrContext);
-	out_channel_nb = av_get_channel_layout_nb_channels(out_ch_layout);
-	out_buffer = (uint8_t *) av_malloc(2 * out_sample_rate);
-
-	mediaContext->audioStream.audioSwrContext = audioSwrContext;
-	mediaContext->audioStream.in_sample_fmt = in_sample_fmt;
-	mediaContext->audioStream.out_sample_fmt = out_sample_fmt;
-	mediaContext->audioStream.in_sample_rate = in_sample_rate;
-	mediaContext->audioStream.out_sample_rate = out_sample_rate;
-	mediaContext->audioStream.in_ch_layout = in_ch_layout;
-	mediaContext->audioStream.out_ch_layout = out_ch_layout;
-	mediaContext->audioStream.out_buffer = out_buffer;
-	mediaContext->audioStream.out_channel_nb = out_channel_nb;
 }
-
-
 
 int initPcmDevice(player_t *mediaContext)
 {
-	snd_pcm_t           *pcm;
-    snd_pcm_hw_params_t *params;
-	int ret;
 	int dir;
-	
-	ret = snd_pcm_open(&pcm, "plughw:0,0", SND_PCM_STREAM_PLAYBACK, 0);
-	if (ret < 0) {
-		printf("[rxhu] open PCM device failed\n");
-		return -1;
-	}
+    int ret;
 
-	snd_pcm_hw_params_alloca(&params);
-	ret = snd_pcm_hw_params_any(pcm, params);
-	if (ret < 0) {
-		printf("[rxhu] snd_pcm_hw_params_any failed!\n");
-		return -1;
-	}
+    /*init pcm snd device*/
+    ret = snd_pcm_open(&mediaContext->audioStream.pcm, "hw:0,0", SND_PCM_STREAM_PLAYBACK, 0);
+    if (ret < 0) {
+        printf("[rxhu] open PCM device failed\n");
+        return -1;
+    }
+    snd_pcm_hw_params_alloca(&mediaContext->audioStream.params);
+    ret = snd_pcm_hw_params_any(mediaContext->audioStream.pcm, mediaContext->audioStream.params);
+    if (ret < 0) {
+        printf("[rxhu] snd_pcm_hw_params_any failed!\n");
+        return -1;
+    }
 
-	ret = snd_pcm_hw_params_set_access(pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    ret = snd_pcm_hw_params_set_access(mediaContext->audioStream.pcm, mediaContext->audioStream.params, SND_PCM_ACCESS_RW_INTERLEAVED);
     if (ret < 0) {
         printf("[rxhu] snd_pcm_hw_params_set_access failed!\n");
         return -1;
     }
 
-	
-	ret = snd_pcm_hw_params_set_format(pcm, params, SND_PCM_FORMAT_S16_LE);
-	if (ret < 0) {
-		printf("[rxhu] snd_pcm_hw_params_set_format failed!\n");
-		return -1;
-	}
+    ret = snd_pcm_hw_params_set_format(mediaContext->audioStream.pcm, mediaContext->audioStream.params, SND_PCM_FORMAT_S16_LE);
+    if (ret < 0) {
+        printf("[rxhu] snd_pcm_hw_params_set_format failed!\n");
+        return -1;
+    }
 
-	
-	ret = snd_pcm_hw_params_set_channels(pcm, params, mediaContext->audioStream.out_channel_nb);
-	if (ret < 0) {
-		printf("[rxhu] snd_pcm_hw_params_set_channels failed!\n");
-		return -1;
-	}
+    ret = snd_pcm_hw_params_set_channels(mediaContext->audioStream.pcm, mediaContext->audioStream.params, mediaContext->audioStream.out_channel_nb);
+    if (ret < 0) {
+        printf("[rxhu] snd_pcm_hw_params_set_channels failed!\n");
+        return -1;
+    }
 
-	ret = snd_pcm_hw_params_set_rate_near(pcm, params, (unsigned int *)(&mediaContext->audioStream.out_sample_rate), &dir);
-	if (ret < 0) {
-		printf("[rxhu] snd_pcm_hw_params_set_rate_near failed!\n");
-		return -1;
-	}
+    ret = snd_pcm_hw_params_set_rate_near(mediaContext->audioStream.pcm, mediaContext->audioStream.params,
+            (unsigned int *)(&mediaContext->audioStream.out_sample_rate), &dir);
+    if (ret < 0) {
+        printf("[rxhu] snd_pcm_hw_params_set_rate_near failed!\n");
+        return -1;
+    }
 
-	
-	ret = snd_pcm_hw_params(pcm, params);
-	if (ret < 0) {
-		printf("[rxhu] snd_pcm_hw_params failed!\n");
-		return -1;
-	}
+    printf("[rxhu] out_sample_rate = %d out_channel_nb = %d\n", mediaContext->audioStream.out_sample_rate, mediaContext->audioStream.out_channel_nb);
 
-	ret = snd_pcm_prepare(pcm);
+	ret = snd_pcm_hw_params(mediaContext->audioStream.pcm, mediaContext->audioStream.params);
+    if (ret < 0) {
+        printf("[rxhu] snd_pcm_hw_params failed!\n");
+        return -1;
+    }
+
+    ret = snd_pcm_prepare (mediaContext->audioStream.pcm);
     if (ret < 0) {
         printf("[rxhu] cannot prepare audio interface for use (%s)\n",snd_strerror (ret));
         return -1;
     }
 
-	printf("[rxhu] init the pcm device set ok!\n");
-
-	mediaContext->audioStream.pcm = pcm;
-	mediaContext->audioStream.params = params; 
-	
+    printf("the pcm device set ok!\n");
 	return 0;
 	
 }
